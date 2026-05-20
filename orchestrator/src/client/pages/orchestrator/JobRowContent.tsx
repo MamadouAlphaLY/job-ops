@@ -14,6 +14,7 @@ interface JobRowContentProps {
   job: JobListItem;
   isSelected?: boolean;
   showStatusDot?: boolean;
+  showSuitabilityScore?: boolean;
   statusDotClassName?: string;
   className?: string;
 }
@@ -24,14 +25,21 @@ function getSuitabilityScoreTone(score: number): string {
   return "text-muted-foreground/60";
 }
 
+function isAwaitingAiScore(job: JobListItem): boolean {
+  if (job.suitabilityScore != null) return false;
+  return job.status === "processing";
+}
+
 export const JobRowContent = ({
   job,
   isSelected = false,
   showStatusDot = true,
+  showSuitabilityScore = true,
   statusDotClassName,
   className,
 }: JobRowContentProps) => {
   const hasScore = job.suitabilityScore != null;
+  const isAwaitingAi = isAwaitingAiScore(job);
   const statusToken = statusTokens[job.status] ?? defaultStatusToken;
   const suitabilityTone = getSuitabilityScoreTone(job.suitabilityScore ?? 0);
   const showStalePdf = isPdfStale(job);
@@ -87,13 +95,26 @@ export const JobRowContent = ({
         )}
       </div>
 
-      {hasScore ? (
+      {showSuitabilityScore && hasScore ? (
         <div className="shrink-0 text-right">
           <span className={cn("text-sm tabular-nums", suitabilityTone)}>
             {job.suitabilityScore}
           </span>
         </div>
-      ) : (
+      ) : showSuitabilityScore && isAwaitingAi ? (
+        <div className="shrink-0 text-right">
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-60 text-xs">
+                AI is still tailoring and scoring this job.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      ) : showSuitabilityScore ? (
         <div className="shrink-0 text-right">
           <TooltipProvider delayDuration={0}>
             <Tooltip>
@@ -107,7 +128,7 @@ export const JobRowContent = ({
             </Tooltip>
           </TooltipProvider>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

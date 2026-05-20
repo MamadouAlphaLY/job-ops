@@ -102,11 +102,64 @@ describe.sequential("Manual jobs API routes", () => {
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.data.source).toBe("manual");
+    expect(body.data.status).toBe("processing");
     expect(body.data.jobUrl).toBe("https://example.com/jobs/backend-engineer");
     expect(vi.mocked(processJob)).toHaveBeenCalledWith(body.data.id, {
       analyticsOrigin: "manual_job_create",
     });
     await new Promise((resolve) => setTimeout(resolve, 25));
+    const readyRes = await fetch(`${baseUrl}/api/jobs/${body.data.id}`);
+    const readyBody = await readyRes.json();
+    expect(readyBody.ok).toBe(true);
+    expect(readyBody.data.status).toBe("ready");
+    expect(readyBody.data.suitabilityScore).toBe(88);
+  });
+
+  it("rejects duplicate manual imports by source and source job id", async () => {
+    const { scoreJobSuitability } = await import("@server/services/scorer");
+    vi.mocked(scoreJobSuitability).mockResolvedValue({
+      score: 88,
+      reason: "Strong fit",
+    });
+
+    const firstRes = await fetch(`${baseUrl}/api/manual-jobs/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        job: {
+          source: "workday:autodesk",
+          sourceJobId: "26WD97952",
+          title: "Backend Engineer",
+          employer: "Autodesk",
+          jobUrl: "https://autodesk.wd1.myworkdayjobs.com/Ext/job/one",
+          jobDescription: "Great role",
+        },
+      }),
+    });
+    expect(firstRes.status).toBe(200);
+
+    const duplicateRes = await fetch(`${baseUrl}/api/manual-jobs/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        job: {
+          source: "workday:autodesk",
+          sourceJobId: "26WD97952",
+          title: "Backend Engineer",
+          employer: "Autodesk",
+          jobUrl: "https://autodesk.wd1.myworkdayjobs.com/Ext/job/two",
+          jobDescription: "Great role",
+        },
+      }),
+    });
+    const duplicateBody = await duplicateRes.json();
+
+    expect(duplicateRes.status).toBe(409);
+    expect(duplicateBody.ok).toBe(false);
+    expect(duplicateBody.error.code).toBe("CONFLICT");
+    expect(duplicateBody.error.message).toBe(
+      "This job is already in your workspace.",
+    );
   });
 
   it("rejects manual imports without a job URL", async () => {

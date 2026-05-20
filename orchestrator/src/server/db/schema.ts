@@ -416,6 +416,115 @@ export const settings = sqliteTable(
   }),
 );
 
+export const watchlistJobStates = sqliteTable(
+  "watchlist_job_states",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .default("tenant_default")
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    source: text("source").notNull(),
+    sourceJobId: text("source_job_id").notNull(),
+    state: text("state", { enum: ["ignored", "moved_to_workspace"] })
+      .notNull()
+      .default("ignored"),
+    createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+    updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    tenantUserSourceJobUnique: uniqueIndex(
+      "idx_watchlist_job_states_tenant_user_source_job_unique",
+    ).on(table.tenantId, table.userId, table.source, table.sourceJobId),
+    tenantUserStateIndex: index(
+      "idx_watchlist_job_states_tenant_user_state",
+    ).on(table.tenantId, table.userId, table.state),
+  }),
+);
+
+export const watchlistChecks = sqliteTable(
+  "watchlist_checks",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .default("tenant_default")
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    lastCheckedAt: text("last_checked_at").notNull(),
+    createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+    updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    tenantUserUnique: uniqueIndex("idx_watchlist_checks_tenant_user_unique").on(
+      table.tenantId,
+      table.userId,
+    ),
+  }),
+);
+
+export const watchlistSeenJobs = sqliteTable(
+  "watchlist_seen_jobs",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .default("tenant_default")
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    source: text("source").notNull(),
+    sourceJobId: text("source_job_id").notNull(),
+    firstSeenAt: text("first_seen_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+    createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+    updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    tenantUserSourceJobUnique: uniqueIndex(
+      "idx_watchlist_seen_jobs_tenant_user_source_job_unique",
+    ).on(table.tenantId, table.userId, table.source, table.sourceJobId),
+    tenantUserLastSeenIndex: index(
+      "idx_watchlist_seen_jobs_tenant_user_last_seen",
+    ).on(table.tenantId, table.userId, table.lastSeenAt),
+  }),
+);
+
+export const watchlistSelectedSources = sqliteTable(
+  "watchlist_selected_sources",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .default("tenant_default")
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    catalogSourceId: text("catalog_source_id"),
+    label: text("label").notNull(),
+    careersUrl: text("careers_url").notNull(),
+    cxsJobsUrl: text("cxs_jobs_url"),
+    sourceType: text("source_type").notNull(),
+    isCustom: integer("is_custom", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+    updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    tenantUserSortOrderUnique: uniqueIndex(
+      "idx_watchlist_selected_sources_tenant_user_sort_order",
+    ).on(table.tenantId, table.userId, table.sortOrder),
+    tenantUserCareersUrlUnique: uniqueIndex(
+      "idx_watchlist_selected_sources_tenant_user_careers_url",
+    ).on(table.tenantId, table.userId, table.careersUrl),
+    tenantUserIndex: index("idx_watchlist_selected_sources_tenant_user").on(
+      table.tenantId,
+      table.userId,
+    ),
+  }),
+);
+
 export const analyticsInstallState = sqliteTable("analytics_install_state", {
   id: text("id").primaryKey(),
   distinctId: text("distinct_id").notNull(),
