@@ -1,6 +1,7 @@
 import { unprocessableEntity } from "@infra/errors";
 import { logger } from "@infra/logger";
 import { getRequestId } from "@infra/request-context";
+import { getJobOpsAppStatus } from "@server/config/app-mode";
 import { isDemoMode } from "@server/config/demo";
 import { getSetting } from "@server/repositories/settings";
 import { enqueueAutoPdfRegenerationForSettingsChanges } from "@server/services/auto-pdf-regeneration";
@@ -432,16 +433,54 @@ async function buildResumeRequirement(): Promise<OnboardingRequirement> {
   });
 }
 
+async function buildHostedResumeRequirement(): Promise<OnboardingRequirement> {
+  const localStatus = await getDesignResumeStatus();
+  if (localStatus.exists) {
+    return buildRequirement({
+      id: "resume",
+      status: "ready",
+      title: "Resume loaded",
+      message:
+        "Your resume is ready to drive job matching, fit assessment, search terms, and application workflows.",
+      primaryAction: "none",
+      details: {
+        source: "local",
+        documentId: localStatus.documentId ?? null,
+        updatedAt: localStatus.updatedAt ?? null,
+      },
+    });
+  }
+
+  return buildRequirement({
+    id: "resume",
+    status: "needs_action",
+    title: "Upload your existing resume, PDF or DOCX",
+    message:
+      "Upload your existing resume as a PDF or DOCX. Job Ops will use it as the baseline for matching, fit assessment, search terms, and application workflows.",
+    primaryAction: "upload_resume",
+    details: { source: "upload" },
+  });
+}
+
 export async function getOnboardingStatus(): Promise<OnboardingStatusResponse> {
+  const appStatus = getJobOpsAppStatus();
+  const userEditableLlmSettings =
+    appStatus.capabilities.userEditableLlmSettings;
+  const hostedMode = appStatus.appMode === "hosted";
+
   if (isDemoMode()) {
     const requirements: OnboardingRequirement[] = [
-      buildRequirement({
-        id: "model",
-        status: "ready",
-        title: "Model connected",
-        message: "Demo mode simulates the model connection.",
-        primaryAction: "none",
-      }),
+      ...(userEditableLlmSettings
+        ? [
+            buildRequirement({
+              id: "model",
+              status: "ready",
+              title: "Model connected",
+              message: "Demo mode simulates the model connection.",
+              primaryAction: "none",
+            }),
+          ]
+        : []),
       buildRequirement({
         id: "resume",
         status: "ready",
@@ -453,9 +492,18 @@ export async function getOnboardingStatus(): Promise<OnboardingStatusResponse> {
     return { complete: true, nextRequirementId: null, requirements };
   }
 
-  const model = await buildModelRequirement();
-  const resume = await buildResumeRequirement();
-  const requirements = [model, resume];
+  const requirements = userEditableLlmSettings
+    ? [
+        await buildModelRequirement(),
+        hostedMode
+          ? await buildHostedResumeRequirement()
+          : await buildResumeRequirement(),
+      ]
+    : [
+        hostedMode
+          ? await buildHostedResumeRequirement()
+          : await buildResumeRequirement(),
+      ];
   const nextRequirement = requirements.find(
     (requirement) => requirement.status !== "ready",
   );
